@@ -81,6 +81,12 @@ class WC_Gateway_Moneybag extends WC_Payment_Gateway
         add_filter('query_vars', array($this, 'add_moneybag_query_vars')); // Allow query vars for the custom endpoint.
         add_action('template_redirect', array($this, 'handle_moneybag_callback_request')); // Intercept the request.
         add_action('woocommerce_thankyou_' . $this->id, array($this, 'thankyou_page')); // For success page info.
+        
+        // Make phone and email required when Moneybag is selected
+        add_action('woocommerce_checkout_process', array($this, 'validate_required_fields'));
+        add_filter('woocommerce_billing_fields', array($this, 'make_billing_fields_required'), 20);
+        add_filter('woocommerce_checkout_fields', array($this, 'modify_checkout_fields'), 20);
+        add_action('wp_enqueue_scripts', array($this, 'enqueue_checkout_scripts'));
     }
 
     /**
@@ -157,6 +163,20 @@ class WC_Gateway_Moneybag extends WC_Payment_Gateway
         if (! $order) {
             wc_add_notice(__('Order not found.', 'moneybag-woocommerce'), 'error');
             return array('result' => 'fail', 'redirect' => wc_get_checkout_url());
+        }
+        
+        // Validate required fields for Moneybag
+        $email = $order->get_billing_email();
+        $phone = $order->get_billing_phone();
+        
+        if (empty($email)) {
+            wc_add_notice(__('Billing email address is required for Moneybag payments.', 'moneybag-woocommerce'), 'error');
+            return array('result' => 'fail', 'redirect' => $order->get_checkout_payment_url(true));
+        }
+        
+        if (empty($phone)) {
+            wc_add_notice(__('Billing phone number is required for Moneybag payments.', 'moneybag-woocommerce'), 'error');
+            return array('result' => 'fail', 'redirect' => $order->get_checkout_payment_url(true));
         }
 
         // Ensure SDK is initialized before attempting to use it.
@@ -597,5 +617,78 @@ class WC_Gateway_Moneybag extends WC_Payment_Gateway
         // Assumes this file is in 'includes/gateways' and the main plugin file is 'moneybag-woocommerce.php' in the parent directory.
         $plugin_data = get_plugin_data(plugin_dir_path(dirname(__FILE__)) . 'moneybag-woocommerce.php');
         return $plugin_data['Version'] ?? 'unknown'; // Return 'unknown' if version not found.
+    }
+    
+    /**
+     * Make billing phone and email fields required
+     */
+    public function make_billing_fields_required($fields) {
+        // Only make billing phone required when Moneybag is available
+        $chosen_payment_method = WC()->session->get('chosen_payment_method');
+        
+        if ($chosen_payment_method === $this->id || $this->is_available()) {
+            // Make billing phone required
+            if (isset($fields['billing_phone'])) {
+                $fields['billing_phone']['required'] = true;
+            }
+            
+            // Make billing email required (usually already required, but ensure it)
+            if (isset($fields['billing_email'])) {
+                $fields['billing_email']['required'] = true;
+            }
+        }
+        
+        return $fields;
+    }
+    
+    /**
+     * Modify checkout fields to ensure only billing phone is required
+     */
+    public function modify_checkout_fields($fields) {
+        // Ensure shipping phone is not required
+        if (isset($fields['shipping']['shipping_phone'])) {
+            $fields['shipping']['shipping_phone']['required'] = false;
+        }
+        
+        return $fields;
+    }
+    
+    /**
+     * Validate required fields during checkout
+     */
+    public function validate_required_fields() {
+        // Only validate if Moneybag is the selected payment method
+        if (isset($_POST['payment_method']) && $_POST['payment_method'] === $this->id) {
+            // Check billing email
+            if (empty($_POST['billing_email'])) {
+                wc_add_notice(__('Billing email address is required for Moneybag payments.', 'moneybag-woocommerce'), 'error');
+            }
+            
+            // Check billing phone
+            if (empty($_POST['billing_phone'])) {
+                wc_add_notice(__('Billing phone number is required for Moneybag payments.', 'moneybag-woocommerce'), 'error');
+            }
+        }
+    }
+    
+    /**
+     * Enqueue scripts for checkout
+     */
+    public function enqueue_checkout_scripts() {
+        if (is_checkout() && !is_order_received_page()) {
+            wp_enqueue_script(
+                'moneybag-checkout',
+                plugin_dir_url(dirname(__FILE__)) . 'assets/js/moneybag-checkout.js',
+                array('jquery'),
+                $this->get_plugin_version(),
+                true
+            );
+            
+            wp_localize_script('moneybag-checkout', 'moneybag_checkout_params', array(
+                'payment_method_id' => $this->id,
+                'phone_required_message' => __('Billing phone number is required for Moneybag payments.', 'moneybag-woocommerce'),
+                'email_required_message' => __('Billing email address is required for Moneybag payments.', 'moneybag-woocommerce')
+            ));
+        }
     }
 }

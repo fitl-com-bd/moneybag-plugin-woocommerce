@@ -131,20 +131,40 @@ class MoneybagSdk_CheckoutRequest
             if (is_object($value) && method_exists($value, 'toArray')) {
                 $data[$api_key] = $value->toArray();
             } elseif (is_array($value)) {
-                $items_array = [];
-                foreach ($value as $item) {
-                    if (is_object($item) && method_exists($item, 'toArray')) {
-                        $items_array[] = $item->toArray();
-                    } else {
-                        $items_array[] = $item;
+                // Check if this is the metadata field and should be an object
+                if ($api_key === 'metadata' && $this->isAssociativeArray($value)) {
+                    $data[$api_key] = $value; // Keep as associative array, json_encode will make it an object
+                } else {
+                    $items_array = [];
+                    foreach ($value as $item) {
+                        if (is_object($item) && method_exists($item, 'toArray')) {
+                            $items_array[] = $item->toArray();
+                        } else {
+                            $items_array[] = $item;
+                        }
                     }
+                    $data[$api_key] = $items_array;
                 }
-                $data[$api_key] = $items_array;
             } else {
+                // Skip empty string values that should be null (like ipn_url)
+                if ($value === '') {
+                    continue;
+                }
                 $data[$api_key] = $value;
             }
         }
         return json_encode($data);
+    }
+
+    /**
+     * Check if an array is associative (has string keys)
+     * @param array $array
+     * @return bool
+     */
+    private function isAssociativeArray(array $array): bool
+    {
+        if (empty($array)) return false;
+        return array_keys($array) !== range(0, count($array) - 1);
     }
 
     /**
@@ -170,6 +190,10 @@ class MoneybagSdk_CheckoutRequest
                 }
                 $data[$api_key] = $items_array;
             } else {
+                // Skip empty string values that should be null (like ipn_url)
+                if ($value === '') {
+                    continue;
+                }
                 $data[$api_key] = $value;
             }
         }

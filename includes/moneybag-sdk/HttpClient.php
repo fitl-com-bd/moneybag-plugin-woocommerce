@@ -66,6 +66,15 @@ class MoneybagSdk_HttpClient
         }
 
         for ($attempt = 0; $attempt <= $this->retry_attempts; $attempt++) {
+            // Debug logging
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Moneybag API Request: ' . $method . ' ' . $url);
+                error_log('Moneybag API Headers: ' . print_r($headers, true));
+                if ($body) {
+                    error_log('Moneybag API Body: ' . $body);
+                }
+            }
+            
             $response = ('GET' === $method) ? wp_remote_get($url, $args) : wp_remote_post($url, $args);
 
             if (is_wp_error($response)) {
@@ -99,6 +108,12 @@ class MoneybagSdk_HttpClient
 
             $status_code   = wp_remote_retrieve_response_code($response);
             $response_body = wp_remote_retrieve_body($response);
+            
+            // Debug logging for response
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('Moneybag API Response Status: ' . $status_code);
+                error_log('Moneybag API Response Body: ' . $response_body);
+            }
             $decoded_body  = json_decode($response_body, true);
 
             if ($status_code >= 200 && $status_code < 300) {

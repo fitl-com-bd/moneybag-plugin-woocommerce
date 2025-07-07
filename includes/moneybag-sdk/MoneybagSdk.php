@@ -40,7 +40,7 @@ class MoneybagSdk
         if ('production' === $this->environment) {
             $this->base_url = 'https://api.moneybag.com.bd/api/v2'; // Production URL
         } else {
-            $this->base_url = 'https://staging-api.moneybag.com.bd/api/v2'; // Staging URL
+            $this->base_url = 'https://staging.api.moneybag.com.bd/api/v2'; // Staging URL
         }
     }
 
@@ -71,7 +71,7 @@ class MoneybagSdk
 
         $response_data = $this->http_client->post($url, $headers, $body);
 
-        if (isset($response_data['success']) && true === $response_data['success'] && isset($response_data['data'])) {
+        if (isset($response_data['success']) && $response_data['success'] && isset($response_data['data'])) {
             return MoneybagSdk_CheckoutResponse::fromJson($response_data['data']);
         } else {
             throw $this->handleApiError($response_data);
@@ -97,7 +97,7 @@ class MoneybagSdk
 
         $response_data = $this->http_client->get($url, $headers);
 
-        if (isset($response_data['success']) && true === $response_data['success'] && isset($response_data['data'])) {
+        if (isset($response_data['success']) && $response_data['success'] && isset($response_data['data'])) {
             return MoneybagSdk_VerifyResponse::fromJson($response_data['data']);
         } else {
             throw $this->handleApiError($response_data);

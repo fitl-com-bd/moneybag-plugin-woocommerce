@@ -144,3 +144,25 @@ function moneybag_woocommerce_gateway_init()
     }
     add_action('template_redirect', 'moneybag_handle_callback'); // Use template_redirect for earlier execution.
 }
+
+/**
+ * Registers WooCommerce Blocks integration.
+ */
+add_action( 'woocommerce_blocks_loaded', 'moneybag_woocommerce_blocks_support' );
+
+function moneybag_woocommerce_blocks_support() {
+    if ( class_exists( 'Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType' ) ) {
+        require_once plugin_dir_path( __FILE__ ) . 'includes/blocks/class-wc-moneybag-blocks-support.php';
+        add_action(
+            'woocommerce_blocks_payment_method_type_registration',
+            function( Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry $payment_method_registry ) {
+                $payment_method_registry->register( new WC_Moneybag_Blocks_Support() );
+            }
+        );
+    }
+}
+
+/**
+ * Force classic checkout for better compatibility
+ */
+add_filter( 'woocommerce_checkout_is_block_default', '__return_false' );

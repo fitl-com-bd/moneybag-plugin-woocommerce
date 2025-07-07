@@ -1,25 +1,79 @@
-# CakePHP 3
+# WordPress
+*.log
+wp-config.php
+wp-content/advanced-cache.php
+wp-content/backup-db/
+wp-content/backups/
+wp-content/blogs.dir/
+wp-content/cache/
+wp-content/upgrade/
+wp-content/uploads/
+wp-content/mu-plugins/
+wp-content/wp-cache-config.php
+wp-content/plugins/hello.php
 
-/vendor/*
-/config/app.php
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+.tmproj
+*.tmproject
+tmtags
+.DS_Store
+Thumbs.db
 
-/tmp/cache/models/*
-!/tmp/cache/models/empty
-/tmp/cache/persistent/*
-!/tmp/cache/persistent/empty
-/tmp/cache/views/*
-!/tmp/cache/views/empty
-/tmp/sessions/*
-!/tmp/sessions/empty
-/tmp/tests/*
-!/tmp/tests/empty
+# Composer
+vendor/
+composer.lock
+# Keep composer.json for plugin metadata
 
-/logs/*
-!/logs/empty
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
 
-# CakePHP 2
+# Build
+/build/
+/dist/
+*.zip
 
-/app/tmp/*
-/app/Config/core.php
-/app/Config/database.php
-/vendors/*
+# Environment
+.env
+.env.local
+.env.*.local
+.env.docker
+.env.example
+
+# Testing
+/tests/coverage/
+.phpunit.result.cache
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Docker
+docker-compose.yml
+docker-compose.override.yml
+Dockerfile
+/docker/
+.dockerignore
+
+# Development
+DEVELOPMENT.md
+*.sql
+*.bak
+debug-*.php
+test-*.php
+/tests/
+
+# Plugin builds
+*.zip

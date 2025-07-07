@@ -1,5 +1,5 @@
-# Moneybag PHP SDK for WooCommerce
-Official PHP SDK for Moneybag Payment Gateway, integrated with WooCommerce.
+# Moneybag Payment Gateway for WooCommerce
+Official WooCommerce Payment Gateway plugin for Moneybag, enabling seamless payment integration for Bangladesh merchants.
 
 ## Description
 This plugin integrates the Moneybag Payment Gateway with your WooCommerce store, allowing you to accept payments securely via Moneybag. Customers will be redirected to the Moneybag payment page to complete their transactions.
@@ -31,10 +31,24 @@ Access the plugin settings under `WooCommerce > Settings > Payments > Moneybag P
 * **API Timeout (seconds):** Configure the timeout for API requests.
 * **API Retries:** Configure the number of retries for failed API requests.
 
+## Features
+
+* **Secure Payment Processing:** Direct integration with Moneybag's secure payment gateway
+* **Automatic Payment Verification:** Real-time payment status verification
+* **Required Field Validation:** Ensures billing email and phone are provided for Moneybag transactions
+* **WooCommerce Blocks Support:** Compatible with both classic and block-based checkout
+* **Comprehensive Logging:** Detailed transaction logs for debugging and monitoring
+* **Staging/Production Modes:** Easy switching between test and live environments
+
 ## Usage
 
 ### Checkout
 When a customer selects Moneybag as their payment method and proceeds with the order, they will be redirected to the Moneybag hosted payment page. Upon successful payment, they will be redirected back to your WooCommerce Thank You page.
+
+### Required Fields
+The plugin requires the following customer information for Moneybag payments:
+* **Billing Email Address** (required)
+* **Billing Phone Number** (required)
 
 ### Verify Payment
 The plugin automatically verifies payment status with the Moneybag API after the customer returns from the Moneybag payment page. This ensures the payment is confirmed before updating the order status in WooCommerce.
