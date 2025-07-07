@@ -57,10 +57,10 @@ The plugin automatically verifies payment status with the Moneybag API after the
 The plugin uses WooCommerce's built-in logging system. Any errors or issues during payment processing will be logged and can be viewed under `WooCommerce > Status > Logs`.
 
 ## API Reference
-For detailed API specifications, please refer to the official Moneybag API Integration Guide: [https://docs.moneybag.com.bd](https://docs.moneybag.com.bd) (Replace with your actual documentation link).
+For detailed API specifications, please refer to the official Moneybag API Integration Guide: [https://docs.moneybag.com.bd](https://docs.moneybag.com.bd)
 
 ## Contributing
-We welcome contributions to the Moneybag WooCommerce Payment Gateway. Please refer to our [CONTRIBUTING.md](link-to-contributing-md) for guidelines.
+We welcome contributions to the Moneybag WooCommerce Payment Gateway. Please refer to our [CONTRIBUTING.md](./DEVELOPMENT.md) for guidelines.
 
 ## License
 This plugin is released under the MIT License. See the `LICENSE` file for more details.
