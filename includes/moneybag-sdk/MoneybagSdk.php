@@ -40,7 +40,7 @@ class MoneybagSdk
         if ('production' === $this->environment) {
             $this->base_url = 'https://api.moneybag.com.bd/api/v2'; // Production URL
         } else {
-            $this->base_url = 'https://staging.api.moneybag.com.bd/api/v2'; // Staging URL
+            $this->base_url = 'https://sandbox.api.moneybag.com.bd/api/v2'; // Sandbox URL
         }
     }
 
@@ -166,8 +166,35 @@ class MoneybagSdk
         $message     = isset($response_data['message']) ? $response_data['message'] : 'Unknown API error.';
         $error_body  = json_encode($response_data); // Entire response as error body
 
+        // Parse the actual response body if present
+        if (isset($response_data['body']) && is_string($response_data['body'])) {
+            $body_decoded = json_decode($response_data['body'], true);
+            if ($body_decoded) {
+                // Handle production API format with 'detail' field
+                if (isset($body_decoded['detail']) && is_array($body_decoded['detail'])) {
+                    $error_messages = [];
+                    foreach ($body_decoded['detail'] as $error) {
+                        if (isset($error['loc']) && isset($error['msg'])) {
+                            $field_path = is_array($error['loc']) ? implode('.', array_slice($error['loc'], 1)) : $error['loc'];
+                            $error_messages[] = sprintf('%s: %s', $field_path, $error['msg']);
+                        } elseif (isset($error['msg'])) {
+                            $error_messages[] = $error['msg'];
+                        }
+                    }
+                    if (!empty($error_messages)) {
+                        $message = implode('; ', $error_messages);
+                    }
+                }
+                // Handle other possible error formats
+                elseif (isset($body_decoded['message'])) {
+                    $message = $body_decoded['message'];
+                } elseif (isset($body_decoded['error'])) {
+                    $message = $body_decoded['error'];
+                }
+            }
+        }
         // Attempt to get a more specific message if available
-        if (isset($response_data['data']) && is_string($response_data['data'])) {
+        elseif (isset($response_data['data']) && is_string($response_data['data'])) {
             $message = $response_data['data'];
         } elseif (isset($response_data['errors']) && is_array($response_data['errors'])) {
             // If the API returns a structured errors array

@@ -1,12 +1,12 @@
 {
     "name": "moneybag/woocommerce-payment-gateway",
-    "description": "Official Moneybag Payment Gateway for WooCommerce",
+    "description": "Official Moneybag Payment Gateway plugin for WooCommerce",
     "type": "wordpress-plugin",
     "license": "MIT",
     "authors": [
         {
             "name": "Moneybag",
-            "email": "support@moneybag.com.bd"
+            "email": "developer@moneybag.com.bd"
         }
     ],
     "minimum-stability": "stable",

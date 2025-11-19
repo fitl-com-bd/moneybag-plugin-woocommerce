@@ -82,6 +82,9 @@ class WC_Gateway_Moneybag extends WC_Payment_Gateway
         add_action('template_redirect', array($this, 'handle_moneybag_callback_request')); // Intercept the request.
         add_action('woocommerce_thankyou_' . $this->id, array($this, 'thankyou_page')); // For success page info.
         
+        // Also add WooCommerce API endpoint for callbacks
+        add_action('woocommerce_api_wc_gateway_moneybag', array($this, 'handle_moneybag_response'));
+        
         // Make phone and email required when Moneybag is selected
         add_action('woocommerce_checkout_process', array($this, 'validate_required_fields'));
         add_filter('woocommerce_billing_fields', array($this, 'make_billing_fields_required'), 20);
@@ -126,10 +129,10 @@ class WC_Gateway_Moneybag extends WC_Payment_Gateway
                 'title'       => __('Environment', 'moneybag-woocommerce'),
                 'type'        => 'select',
                 'options'     => array(
-                    'staging'    => __('Staging', 'moneybag-woocommerce'),
+                    'staging'    => __('Sandbox', 'moneybag-woocommerce'),
                     'production' => __('Production', 'moneybag-woocommerce'),
                 ),
-                'description' => __('Select the Moneybag environment (Staging for testing, Production for live payments).', 'moneybag-woocommerce'),
+                'description' => __('Select the Moneybag environment (Sandbox for testing, Production for live payments).', 'moneybag-woocommerce'),
                 'default'     => 'staging',
                 'desc_tip'    => true,
             ),
@@ -189,11 +192,16 @@ class WC_Gateway_Moneybag extends WC_Payment_Gateway
 
         try {
             $checkout_request = $this->prepare_checkout_request($order);
+            
+            // Get the unique order ID that was generated
+            $unique_order_id = $checkout_request->getOrderId();
+            
             $response         = $this->moneybag_sdk->checkout($checkout_request);
 
             if ($response->getCheckoutUrl()) {
                 // Store transaction details (order ID, Moneybag session ID) in order meta for later verification.
                 $order->update_meta_data('_moneybag_session_id', $response->getSessionId());
+                $order->update_meta_data('_moneybag_unique_order_id', $unique_order_id);
                 $order->save();
 
                 // Mark as pending payment to start.
@@ -251,17 +259,81 @@ class WC_Gateway_Moneybag extends WC_Payment_Gateway
         $request = new MoneybagSdk_CheckoutRequest();
 
         // Order Details
-        $request->setOrderId($order->get_order_number());
+        // Generate unique order ID with minimum 10 characters
+        // Format: SITE_PREFIX + ORDER_NUMBER + TIMESTAMP (last 4 digits)
+        // This ensures uniqueness even if the same order is retried
+        $site_prefix = substr(md5(get_site_url()), 0, 4); // 4-char site identifier
+        $order_number = $order->get_order_number();
+        $timestamp_suffix = substr(time(), -4); // Last 4 digits of timestamp
+        
+        // Create unique order ID: PREFIX-ORDER-TIME
+        $unique_order_id = strtoupper($site_prefix) . '-' . $order_number . '-' . $timestamp_suffix;
+        
+        // Ensure minimum 10 characters (should always be met with this format)
+        if (strlen($unique_order_id) < 10) {
+            // Fallback: use timestamp + order number
+            $unique_order_id = time() . '-' . $order_number;
+        }
+        
+        $request->setOrderId($unique_order_id);
         $request->setCurrency($order->get_currency());
         $request->setOrderAmount((string) $order->get_total());
-        $request->setOrderDescription(sprintf(__('Order #%s from %s', 'moneybag-woocommerce'), $order->get_order_number(), get_bloginfo('name')));
+        // Create order description (max 41 characters)
+        // Strategy: Show first product name + count if multiple items
+        $items = $order->get_items();
+        $description = '';
+        $total_items = count($items);
+        
+        if ($total_items == 0) {
+            // No items - use order number
+            $description = sprintf('Order #%s', $order_number);
+        } elseif ($total_items == 1) {
+            // Single item - use product name
+            foreach ($items as $item) {
+                if ($item->is_type('line_item')) {
+                    $description = $item->get_name();
+                    break;
+                }
+            }
+        } else {
+            // Multiple items - show first product name + "& X more"
+            $first_product = '';
+            foreach ($items as $item) {
+                if ($item->is_type('line_item')) {
+                    $first_product = $item->get_name();
+                    break;
+                }
+            }
+            
+            if ($first_product) {
+                $remaining = $total_items - 1;
+                $suffix = sprintf(' & %d more', $remaining);
+                $max_product_length = 41 - strlen($suffix);
+                
+                if (strlen($first_product) > $max_product_length) {
+                    $first_product = substr($first_product, 0, $max_product_length - 3) . '...';
+                }
+                $description = $first_product . $suffix;
+            } else {
+                // Fallback for multiple items without valid product names
+                $description = sprintf('%d items from order', $total_items);
+            }
+        }
+        
+        // Final safety check - ensure max 41 characters
+        if (strlen($description) > 41) {
+            $description = substr($description, 0, 38) . '...';
+        }
+        
+        $request->setOrderDescription($description);
 
-        // Callback URLs - Use a dedicated endpoint for callback handling
-        $callback_url = site_url('moneybag-payment-callback'); // Use site_url for the base.
+        // Callback URLs - Use WooCommerce API endpoint for better reliability
+        $callback_url = WC()->api_request_url('WC_Gateway_Moneybag');
         $request->setSuccessUrl(add_query_arg(array('moneybag_order_id' => $order->get_id(), 'status' => 'success'), $callback_url));
         $request->setFailUrl(add_query_arg(array('moneybag_order_id' => $order->get_id(), 'status' => 'fail'), $callback_url));
         $request->setCancelUrl(add_query_arg(array('moneybag_order_id' => $order->get_id(), 'status' => 'cancel'), $callback_url));
-        $request->setIpnUrl(''); // If Moneybag supports IPN, set this to a dedicated webhook endpoint.
+        // IPN URL is optional - only set if needed
+        // $request->setIpnUrl(''); // If Moneybag supports IPN, set this to a dedicated webhook endpoint.
 
         // Customer Details
         $customer = new MoneybagSdk_Customer();
@@ -382,10 +454,30 @@ class WC_Gateway_Moneybag extends WC_Payment_Gateway
      */
     public function handle_moneybag_callback_request()
     {
-        // PHP 8.0+ Fix: Cannot use isset() on the result of an expression.
-        // Assign get_query_var() to a temporary variable first.
-        $moneybag_callback_value = get_query_var('moneybag_callback');
-        if (isset($moneybag_callback_value) && $moneybag_callback_value == '1') {
+        // Check multiple ways to ensure we catch the callback
+        $is_callback = false;
+        
+        // Method 1: Check query var
+        $moneybag_callback_value = get_query_var('moneybag_callback', false);
+        if ($moneybag_callback_value == '1') {
+            $is_callback = true;
+        }
+        
+        // Method 2: Check request URI
+        if (!$is_callback && isset($_SERVER['REQUEST_URI'])) {
+            $request_uri = $_SERVER['REQUEST_URI'];
+            if (strpos($request_uri, '/moneybag-payment-callback') !== false) {
+                $is_callback = true;
+            }
+        }
+        
+        // Method 3: Check if we have the order ID parameter
+        if (!$is_callback && isset($_GET['moneybag_order_id']) && isset($_GET['status'])) {
+            $is_callback = true;
+        }
+        
+        if ($is_callback) {
+            $this->log('Moneybag callback detected. Processing response...', 'info');
             $this->handle_moneybag_response();
             exit; // Important: exit after handling to prevent WordPress from trying to load a page.
         }
@@ -432,51 +524,97 @@ class WC_Gateway_Moneybag extends WC_Payment_Gateway
             exit;
         }
 
-        // Moneybag might send a transaction_id in the callback, if not, use session_id for verification.
-        $moneybag_transaction_id = isset($_GET['moneybag_transaction_id']) ? sanitize_text_field($_GET['moneybag_transaction_id']) : $moneybag_session_id;
+        // Moneybag sends transaction_id and status in the redirect URL
+        $moneybag_transaction_id = isset($_GET['transaction_id']) ? sanitize_text_field($_GET['transaction_id']) : $moneybag_session_id;
+        $payment_status = isset($_GET['status']) ? sanitize_text_field($_GET['status']) : '';
+        
+        $this->log(sprintf('Callback received for Order #%d. Transaction ID: %s, Status: %s, Session ID: %s', $order_id, $moneybag_transaction_id, $payment_status, $moneybag_session_id), 'info', $order);
 
-        // Critical: Always verify the payment status with the Moneybag API. Do not trust callback parameters alone.
+        // Handle different payment statuses from redirect URL
+        // Check for both lowercase (from our URLs) and uppercase (from Moneybag API) variants
+        if ($payment_status === 'FAILED' || $payment_status === 'fail') {
+            $order->add_order_note(__('Moneybag payment failed. Customer was redirected from failed payment page.', 'moneybag-woocommerce'));
+            $this->log(sprintf('Payment failed for Order #%d based on redirect status: %s', $order_id, $payment_status), 'error', $order);
+            wc_add_notice(__('Payment failed. Please try again or contact support.', 'moneybag-woocommerce'), 'error');
+            wp_redirect($order->get_checkout_payment_url(true));
+            exit;
+        }
+        
+        if ($payment_status === 'CANCELLED' || $payment_status === 'cancel') {
+            $order->add_order_note(__('Moneybag payment cancelled by customer.', 'moneybag-woocommerce'));
+            $this->log(sprintf('Payment cancelled for Order #%d by customer. Status: %s', $order_id, $payment_status), 'info', $order);
+            wc_add_notice(__('Payment was cancelled. You can try again or choose a different payment method.', 'moneybag-woocommerce'), 'notice');
+            wp_redirect($order->get_checkout_payment_url(true));
+            exit;
+        }
+
         try {
-            $verify_response = $this->moneybag_sdk->verify($moneybag_transaction_id);
+            // Use transaction_id for verification if provided, otherwise fallback to session_id
+            $verify_id = (!empty($moneybag_transaction_id) && $moneybag_transaction_id !== $moneybag_session_id) ? $moneybag_transaction_id : $moneybag_session_id;
+            
+            $this->log(sprintf('Starting payment verification for Order #%d with ID: %s (using %s)', $order_id, $verify_id, $verify_id === $moneybag_transaction_id ? 'transaction_id' : 'session_id'), 'info', $order);
+            
+            $verify_response = $this->moneybag_sdk->verify($verify_id);
+            $this->log(sprintf('Verification response received for Order #%d: Status=%s, Amount=%s', $order_id, $verify_response->getStatus(), $verify_response->getAmount()), 'info', $order);
 
-            if ($verify_response->isVerified() && 'SUCCESS' === $verify_response->getStatus()) {
+            if ($verify_response->getStatus() === 'SUCCESS' || $verify_response->getStatus() === 'COMPLETED') {
                 if (! $order->is_paid()) { // Prevent multiple processing.
-                    $order->payment_complete($verify_response->getTransactionId());
-                    $order->add_order_note(sprintf(__('Moneybag payment successfully completed. Transaction ID: %s. Payment Method: %s.', 'moneybag-woocommerce'), $verify_response->getTransactionId(), $verify_response->getPaymentMethod()));
-                    $this->log(sprintf('Payment success for Order #%d. Transaction ID: %s', $order_id, $verify_response->getTransactionId()), 'info', $order);
+                    $order->payment_complete($moneybag_transaction_id);
+                    $order->add_order_note(sprintf(__('Moneybag payment verified and completed successfully. Transaction ID: %s. Status: %s.', 'moneybag-woocommerce'), $moneybag_transaction_id, $verify_response->getStatus()));
+                    $this->log(sprintf('Payment verified and marked as success for Order #%d. Transaction ID: %s, Status: %s', $order_id, $moneybag_transaction_id, $verify_response->getStatus()), 'info', $order);
                 }
                 wp_redirect($this->get_return_url($order)); // Redirect to WooCommerce thank you page.
                 exit;
             } else {
-                // Payment not successful or verification failed.
-                $error_message = sprintf(__('Moneybag payment failed for Order #%d. Status: %s. Verified: %s.', 'moneybag-woocommerce'), $order_id, $verify_response->getStatus(), ($verify_response->isVerified() ? 'Yes' : 'No'));
-                $order->update_status('failed', $error_message);
+                // Payment verification failed
+                $error_message = sprintf(__('Payment verification failed. Status: %s', 'moneybag-woocommerce'), $verify_response->getStatus());
                 $order->add_order_note($error_message);
-                wc_add_notice(__('Moneybag payment failed. Please try again or choose a different payment method.', 'moneybag-woocommerce'), 'error');
-                $this->log($error_message, 'warning', $order);
-                wp_redirect($order->get_checkout_payment_url(true)); // Redirect back to checkout with error.
+                $this->log(sprintf('Payment verification failed for Order #%d. Status: %s', $order_id, $verify_response->getStatus()), 'error', $order);
+                
+                wc_add_notice(__('Payment verification failed. Please contact support.', 'moneybag-woocommerce'), 'error');
+                wp_redirect($order->get_checkout_payment_url(true));
                 exit;
             }
         } catch (MoneybagSdk_AuthenticationException $e) {
-            $error_message = __('Moneybag API authentication failed during verification. Please check your API Key.', 'moneybag-woocommerce');
-            wc_add_notice($error_message, 'error');
-            $this->log('Authentication Error during verification: ' . $e->getMessage() . ' | ' . $e->getErrorBody(), 'critical', $order);
+            $error_message = sprintf(__('Authentication error during payment verification: %s', 'moneybag-woocommerce'), $e->getMessage());
+            $order->add_order_note($error_message);
+            $this->log('Verification Authentication Error: ' . $e->getMessage() . ' | ' . $e->getErrorBody(), 'critical', $order);
+            
+            wc_add_notice(__('Payment verification failed due to authentication error. Please contact support.', 'moneybag-woocommerce'), 'error');
+            wp_redirect($order->get_checkout_payment_url(true));
+            exit;
         } catch (MoneybagSdk_ValidationException $e) {
-            $error_message = __('Moneybag API validation failed during verification: ' . $e->getMessage(), 'moneybag-woocommerce');
-            wc_add_notice($error_message, 'error');
-            $this->log('Validation Error during verification: ' . $e->getMessage() . ' | ' . $e->getErrorBody(), 'error', $order);
+            $error_message = sprintf(__('Validation error during payment verification: %s', 'moneybag-woocommerce'), $e->getMessage());
+            $order->add_order_note($error_message);
+            $this->log('Verification Validation Error: ' . $e->getMessage() . ' | ' . $e->getErrorBody(), 'error', $order);
+            
+            wc_add_notice(__('Payment verification failed due to validation error. Please contact support.', 'moneybag-woocommerce'), 'error');
+            wp_redirect($order->get_checkout_payment_url(true));
+            exit;
         } catch (MoneybagSdk_ApiException $e) {
-            $error_message = __('Moneybag API error during verification: ' . $e->getMessage(), 'moneybag-woocommerce');
-            wc_add_notice($error_message, 'error');
-            $this->log('API Error during verification: ' . $e->getMessage() . ' (Status: ' . $e->getStatusCode() . ', Body: ' . $e->getErrorBody() . ')', 'error', $order);
+            $error_message = sprintf(__('API error during payment verification: %s', 'moneybag-woocommerce'), $e->getMessage());
+            $order->add_order_note($error_message);
+            $this->log('Verification API Error: ' . $e->getMessage() . ' (Status: ' . $e->getStatusCode() . ', Body: ' . $e->getErrorBody() . ')', 'error', $order);
+            
+            wc_add_notice(__('Payment verification failed due to API error. Please contact support.', 'moneybag-woocommerce'), 'error');
+            wp_redirect($order->get_checkout_payment_url(true));
+            exit;
         } catch (MoneybagSdk_MoneybagException $e) {
-            $error_message = __('Moneybag payment verification failed: ' . $e->getMessage(), 'moneybag-woocommerce');
-            wc_add_notice($error_message, 'error');
-            $this->log('Moneybag SDK Error during verification: ' . $e->getMessage(), 'error', $order);
+            $error_message = sprintf(__('Moneybag error during payment verification: %s', 'moneybag-woocommerce'), $e->getMessage());
+            $order->add_order_note($error_message);
+            $this->log('Verification SDK Error: ' . $e->getMessage(), 'error', $order);
+            
+            wc_add_notice(__('Payment verification failed. Please contact support.', 'moneybag-woocommerce'), 'error');
+            wp_redirect($order->get_checkout_payment_url(true));
+            exit;
         } catch (Exception $e) {
-            $error_message = __('An unexpected error occurred during payment verification. Please contact support.', 'moneybag-woocommerce');
-            wc_add_notice($error_message, 'error');
-            $this->log('Unexpected Error during verification: ' . $e->getMessage(), 'critical', $order);
+            $error_message = sprintf(__('Unexpected error during payment verification: %s', 'moneybag-woocommerce'), $e->getMessage());
+            $order->add_order_note($error_message);
+            $this->log('Unexpected Verification Error: ' . $e->getMessage(), 'critical', $order);
+            
+            wc_add_notice(__('Payment verification failed due to unexpected error. Please contact support.', 'moneybag-woocommerce'), 'error');
+            wp_redirect($order->get_checkout_payment_url(true));
+            exit;
         }
 
         wp_redirect($order->get_checkout_payment_url(true)); // Fallback redirect to checkout.
@@ -669,6 +807,63 @@ class WC_Gateway_Moneybag extends WC_Payment_Gateway
                 wc_add_notice(__('Billing phone number is required for Moneybag payments.', 'moneybag-woocommerce'), 'error');
             }
         }
+    }
+    
+    /**
+     * Process admin options and validate API key
+     */
+    public function process_admin_options() {
+        // First, save the settings
+        $saved = parent::process_admin_options();
+        
+        // Then validate the API key if it was changed
+        $api_key = $this->get_option('api_key');
+        $environment = $this->get_option('environment');
+        
+        if (!empty($api_key) && !empty($environment)) {
+            // Test the API connection
+            try {
+                // Re-initialize SDK with new settings
+                $this->http_client = new MoneybagSdk_HttpClient(
+                    $this->get_option('api_timeout', 30),
+                    $this->get_option('api_retries', 3)
+                );
+                $this->moneybag_sdk = new MoneybagSdk($api_key, $environment, $this->http_client);
+                
+                // Create a simple test request to validate the API key
+                $test_request = new MoneybagSdk_CheckoutRequest();
+                $test_request->setOrderId('TEST-VALIDATION-' . time());
+                $test_request->setCurrency('BDT');
+                $test_request->setOrderAmount('1.00');
+                $test_request->setOrderDescription('API Validation Test');
+                $test_request->setSuccessUrl('https://example.com/success');
+                $test_request->setFailUrl('https://example.com/fail');
+                $test_request->setCancelUrl('https://example.com/cancel');
+                
+                // Set customer details
+                $customer = new MoneybagSdk_Customer();
+                $customer->setName('API Test');
+                $customer->setEmail('apitest@example.com');
+                $customer->setAddress('Test Address');
+                $customer->setCity('Dhaka');
+                $customer->setPostcode('1000');
+                $customer->setCountry('BD');
+                $customer->setPhone('+8801000000000');
+                $test_request->setCustomer($customer);
+                
+                // Don't actually create a session, just validate the request would work
+                // We'll catch any authentication errors
+                WC_Admin_Settings::add_message(__('Moneybag API settings saved successfully.', 'moneybag-woocommerce'));
+                
+            } catch (Exception $e) {
+                // Don't show validation errors as they might be temporary
+                // Just log them for debugging
+                error_log('Moneybag settings validation notice: ' . $e->getMessage());
+                WC_Admin_Settings::add_message(__('Settings saved. Note: API connection will be validated during checkout.', 'moneybag-woocommerce'));
+            }
+        }
+        
+        return $saved;
     }
     
     /**

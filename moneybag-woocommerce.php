@@ -2,11 +2,11 @@
 
 /**
  * Plugin Name: Moneybag Payment Gateway for WooCommerce
- * Plugin URI:  https://docs.moneybag.com.bd
+ * Plugin URI:  https://docs.moneybag.com.bd/
  * Description: Official Moneybag Payment Gateway for WooCommerce.
- * Version:     2.0.1
- * Author:      Sakib ISlam
- * Author URI:  https://github.com/IslamSakib
+ * Version:     0.0.1
+ * Author:      Mahabubul Hasan
+ * Author URI:  https://github.com/mahabubul-dev
  * License:     MIT
  * Text Domain: moneybag-woocommerce
  * Domain Path: /languages
@@ -166,3 +166,32 @@ function moneybag_woocommerce_blocks_support() {
  * Force classic checkout for better compatibility
  */
 add_filter( 'woocommerce_checkout_is_block_default', '__return_false' );
+
+/**
+ * Plugin activation hook
+ */
+register_activation_hook(__FILE__, 'moneybag_activate');
+function moneybag_activate() {
+    // Set flag to flush rewrite rules
+    update_option('moneybag_flush_rewrite_rules', true);
+    
+    // Add the rewrite rule
+    add_rewrite_rule('^moneybag-payment-callback/?$', 'index.php?moneybag_callback=1', 'top');
+    
+    // Also add query var
+    add_filter('query_vars', function($vars) {
+        $vars[] = 'moneybag_callback';
+        return $vars;
+    });
+    
+    flush_rewrite_rules();
+}
+
+/**
+ * Plugin deactivation hook
+ */
+register_deactivation_hook(__FILE__, 'moneybag_deactivate');
+function moneybag_deactivate() {
+    // Flush rewrite rules to remove our custom rule
+    flush_rewrite_rules();
+}

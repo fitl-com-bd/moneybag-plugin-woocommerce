@@ -67,7 +67,7 @@ class MoneybagSdk_HttpClient
 
         for ($attempt = 0; $attempt <= $this->retry_attempts; $attempt++) {
             // Debug logging
-            if (defined('WP_DEBUG') && WP_DEBUG) {
+            if (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG) {
                 error_log('Moneybag API Request: ' . $method . ' ' . $url);
                 error_log('Moneybag API Headers: ' . print_r($headers, true));
                 if ($body) {
@@ -110,7 +110,7 @@ class MoneybagSdk_HttpClient
             $response_body = wp_remote_retrieve_body($response);
             
             // Debug logging for response
-            if (defined('WP_DEBUG') && WP_DEBUG) {
+            if (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG) {
                 error_log('Moneybag API Response Status: ' . $status_code);
                 error_log('Moneybag API Response Body: ' . $response_body);
             }
@@ -124,11 +124,13 @@ class MoneybagSdk_HttpClient
                     'status_code' => $status_code,
                 ];
             } else {
+                // Return full error information including raw body for better error handling
                 return [
                     'success'     => false,
                     'message'     => isset($decoded_body['message']) ? $decoded_body['message'] : 'API error occurred.',
                     'status_code' => $status_code,
                     'body'        => $response_body,
+                    'data'        => $decoded_body, // Include decoded data if available
                 ];
             }
         }
