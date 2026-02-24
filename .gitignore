@@ -38,9 +38,6 @@ yarn-error.log
 
 # Build
 /build/
-/dist/
-*.zip
-build-plugin.sh
 
 # Environment
 .env
@@ -77,4 +74,3 @@ test-*.php
 /tests/
 
 # Plugin builds
-*.zip
