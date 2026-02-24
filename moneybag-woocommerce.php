@@ -4,7 +4,7 @@
  * Plugin Name: Moneybag Payment Gateway for WooCommerce
  * Plugin URI:  https://docs.moneybag.com.bd/
  * Description: Official Moneybag Payment Gateway for WooCommerce.
- * Version:     0.0.1
+ * Version:     1.0.0
  * Author:      Mahabubul Hasan
  * Author URI:  https://github.com/mahabubul-dev
  * License:     MIT
