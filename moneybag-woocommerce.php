@@ -4,7 +4,7 @@
  * Plugin Name: Moneybag Payment Gateway for WooCommerce
  * Plugin URI:  https://docs.moneybag.com.bd/
  * Description: Official Moneybag Payment Gateway for WooCommerce.
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Mahabubul Hasan
  * Author URI:  https://github.com/mahabubul-dev
  * License:     MIT
@@ -42,6 +42,7 @@ function moneybag_woocommerce_gateway_init()
     }
 
     // Include the main gateway class here. It should always be included once WooCommerce is active.
+    require_once plugin_dir_path(__FILE__) . 'includes/class-moneybag-payment-check.php';
     require_once plugin_dir_path(__FILE__) . 'includes/class-wc-gateway-moneybag.php';
 
     // Include SDK classes (adjust paths as needed within your includes/moneybag-sdk directory)

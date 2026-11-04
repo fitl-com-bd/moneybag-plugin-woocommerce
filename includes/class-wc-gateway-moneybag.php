@@ -262,18 +262,11 @@ class WC_Gateway_Moneybag extends WC_Payment_Gateway
         // Generate unique order ID with minimum 10 characters
         // Format: SITE_PREFIX + ORDER_NUMBER + TIMESTAMP (last 4 digits)
         // This ensures uniqueness even if the same order is retried
-        $site_prefix = substr(md5(get_site_url()), 0, 4); // 4-char site identifier
         $order_number = $order->get_order_number();
         $timestamp_suffix = substr(time(), -4); // Last 4 digits of timestamp
-        
-        // Create unique order ID: PREFIX-ORDER-TIME
-        $unique_order_id = strtoupper($site_prefix) . '-' . $order_number . '-' . $timestamp_suffix;
-        
-        // Ensure minimum 10 characters (should always be met with this format)
-        if (strlen($unique_order_id) < 10) {
-            // Fallback: use timestamp + order number
-            $unique_order_id = time() . '-' . $order_number;
-        }
+
+        // Create unique order ID: PREFIX-ORDER-TIME (at least 10 characters).
+        $unique_order_id = Moneybag_Payment_Check::order_id_prefix(get_site_url(), $order_number) . $timestamp_suffix;
         
         $request->setOrderId($unique_order_id);
         $request->setCurrency($order->get_currency());
@@ -557,8 +550,22 @@ class WC_Gateway_Moneybag extends WC_Payment_Gateway
             $verify_response = $this->moneybag_sdk->verify($verify_id);
             $this->log(sprintf('Verification response received for Order #%d: Status=%s, Amount=%s', $order_id, $verify_response->getStatus(), $verify_response->getAmount()), 'info', $order);
 
-            if ($verify_response->getStatus() === 'SUCCESS' || $verify_response->getStatus() === 'COMPLETED') {
+            $mismatch = Moneybag_Payment_Check::mismatch(
+                array(
+                    'verified' => $verify_response->isVerified(),
+                    'status'   => $verify_response->getStatus(),
+                    'order_id' => $verify_response->getOrderId(),
+                    'amount'   => $verify_response->getAmount(),
+                    'currency' => $verify_response->getCurrency(),
+                ),
+                Moneybag_Payment_Check::order_id_prefix(get_site_url(), $order->get_order_number()),
+                $order->get_total(),
+                $order->get_currency()
+            );
+
+            if (null === $mismatch) {
                 if (! $order->is_paid()) { // Prevent multiple processing.
+                    $moneybag_transaction_id = $verify_response->getTransactionId();
                     $order->payment_complete($moneybag_transaction_id);
                     $order->add_order_note(sprintf(__('Moneybag payment verified and completed successfully. Transaction ID: %s. Status: %s.', 'moneybag-woocommerce'), $moneybag_transaction_id, $verify_response->getStatus()));
                     $this->log(sprintf('Payment verified and marked as success for Order #%d. Transaction ID: %s, Status: %s', $order_id, $moneybag_transaction_id, $verify_response->getStatus()), 'info', $order);
@@ -567,7 +574,7 @@ class WC_Gateway_Moneybag extends WC_Payment_Gateway
                 exit;
             } else {
                 // Payment verification failed
-                $error_message = sprintf(__('Payment verification failed. Status: %s', 'moneybag-woocommerce'), $verify_response->getStatus());
+                $error_message = sprintf(__('Payment verification failed (%1$s). Status: %2$s', 'moneybag-woocommerce'), $mismatch, $verify_response->getStatus());
                 $order->add_order_note($error_message);
                 $this->log(sprintf('Payment verification failed for Order #%d. Status: %s', $order_id, $verify_response->getStatus()), 'error', $order);
                 

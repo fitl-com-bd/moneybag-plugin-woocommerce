@@ -40,7 +40,7 @@ final class WC_Moneybag_Blocks_Support extends AbstractPaymentMethodType {
             ? require( $script_asset_path )
             : array(
                 'dependencies' => array(),
-                'version'      => '1.0.0'
+                'version'      => '1.0.1'
             );
         $script_url        = plugin_dir_url( dirname( __DIR__ ) ) . 'assets/js/blocks/moneybag-blocks.js';
 
