@@ -69,7 +69,6 @@ class MoneybagSdk_HttpClient
             // Debug logging
             if (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG) {
                 error_log('Moneybag API Request: ' . $method . ' ' . $url);
-                error_log('Moneybag API Headers: ' . print_r($headers, true));
                 if ($body) {
                     error_log('Moneybag API Body: ' . $body);
                 }

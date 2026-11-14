@@ -2,7 +2,7 @@
 # Build script for Moneybag WooCommerce Plugin
 
 PLUGIN_NAME="moneybag-woocommerce"
-VERSION="1.0.0"
+VERSION="1.0.1"
 BUILD_DIR="./build"
 DIST_DIR="./dist"
 
